@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Leuchtfeuer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="3D-Koop-Escape für zwei Handys: Bringt das Leuchtfeuer wieder zum Brennen, bevor der Frachter auf die Klippen läuft.">
+<meta name="theme-color" content="#0a1018">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Source+Sans+3:wght@400;600&family=Courier+Prime&display=swap">
+<style>
+/* Layout: Vollbild-3D, darüber schmale Kopfzeile (Rolle, Uhr) und unten aufklappende Karten zum Untersuchen.
+   Bewusst nur ein Look: Sturmnacht. Tiefblau-Schiefer, warmes Lampenlicht als Akzent, Signalrot für Gefahr. */
+:root {
+  --nacht: #0a1018;
+  --flaeche: #121b26;
+  --flaeche-2: #1a2633;
+  --linie: #2a3a4c;
+  --text: #e8eef2;
+  --leise: #93a4b3;
+  --lampe: #ffc46b;
+  --lampe-text: #2a1a00;
+  --gefahr: #ff5a4e;
+  --gut: #7fdcab;
+  --papier: #efe6d2;
+  --tinte: #2b241b;
+  --f-titel: "Fraunces", Georgia, serif;
+  --f-text: "Source Sans 3", system-ui, -apple-system, sans-serif;
+  --f-mono: "Courier Prime", "Courier New", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; background: var(--nacht); color: var(--text); font: 16px/1.5 var(--f-text); overflow: hidden; -webkit-text-size-adjust: 100%; }
+canvas#welt { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.knopf { font: 600 16px var(--f-text); border-radius: 10px; padding: 12px 16px; cursor: pointer; border: 1px solid var(--linie); background: var(--flaeche-2); color: var(--text); text-align: center; }
+.knopf.haupt { background: var(--lampe); color: var(--lampe-text); border-color: var(--lampe); }
+.knopf.klein { font-size: 13px; padding: 7px 10px; }
+.knopf:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--lampe); outline-offset: 2px; }
+h1, h2 { font-family: var(--f-titel); margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(40px, 12vw, 64px); font-weight: 800; line-height: .95; letter-spacing: -0.01em; }
+h2 { font-size: 24px; font-weight: 800; }
+p { margin: 0; }
+.leise { color: var(--leise); }
+input.feld { font: 600 24px var(--f-mono); letter-spacing: .2em; text-transform: uppercase; text-align: center; width: 100%; color: var(--text); background: var(--nacht); border: 1px solid var(--linie); border-radius: 10px; padding: 12px; }
+
+/* Menüs */
+.menue {
+  position: fixed; inset: 0; z-index: 20; overflow-y: auto;
+  background: radial-gradient(120% 70% at 50% 0%, rgba(255, 196, 107, .14), transparent 60%), rgba(10, 16, 24, .9);
+  padding: calc(env(safe-area-inset-top, 0px) + 36px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 32px) max(16px, env(safe-area-inset-left, 0px));
+}
+.menue-innen { max-width: 520px; margin: 0 auto; display: grid; gap: 18px; }
+.untertitel { font-size: 18px; color: var(--leise); max-width: 36ch; }
+.reihe { display: flex; gap: 10px; flex-wrap: wrap; }
+.reihe > .knopf { flex: 1 1 150px; }
+.codeanzeige { font: 700 clamp(48px, 16vw, 68px)/1 var(--f-mono); letter-spacing: .2em; text-align: center; color: var(--lampe); }
+.rolle { text-align: left; display: grid; gap: 4px; padding: 16px; border-radius: 14px; border: 1px solid var(--linie); background: var(--flaeche); color: var(--text); cursor: pointer; font: inherit; }
+.rolle b { font: 800 22px var(--f-titel); }
+.rolle span { color: var(--leise); font-size: 15px; }
+.rolle:hover { border-color: var(--lampe); }
+.meldung { font-size: 14px; min-height: 1.4em; }
+.meldung.fehler { color: var(--gefahr); }
+.leuchtturm { width: 56px; height: 86px; }
+
+/* HUD */
+.hud {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 10;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(rgba(10, 16, 24, .85), rgba(10, 16, 24, 0));
+  pointer-events: none;
+}
+.hud > * { pointer-events: auto; }
+.hud .wer { font: 800 18px var(--f-titel); }
+.hud .wer small { font: 400 12px var(--f-mono); color: var(--leise); margin-left: 6px; }
+.hud .leer { flex: 1; }
+.uhr { font: 700 26px var(--f-mono); font-variant-numeric: tabular-nums; }
+.uhr.knapp { color: var(--gefahr); }
+.fortschritt { display: flex; gap: 4px; }
+.fortschritt i { width: 18px; height: 4px; border-radius: 2px; background: var(--linie); }
+.fortschritt i.an { background: var(--lampe); }
+.tipp {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 9;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  font-size: 14px; color: var(--text); background: rgba(10, 16, 24, .72); border: 1px solid var(--linie);
+  padding: 8px 14px; border-radius: 999px; white-space: nowrap; pointer-events: none;
+  transition: opacity .6s;
+}
+.fadenkreuz { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255, 255, 255, .5); z-index: 8; pointer-events: none; }
+
+/* Untersuchungs-Karte */
+.blatt {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+  max-height: 86%; overflow-y: auto;
+  background: var(--flaeche); border-top: 1px solid var(--linie); border-radius: 18px 18px 0 0;
+  padding: 18px max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 18px) max(16px, env(safe-area-inset-left, 0px));
+  box-shadow: 0 -20px 60px rgba(0, 0, 0, .5);
+}
+.blatt-innen { max-width: 560px; margin: 0 auto; display: grid; gap: 14px; }
+.blatt-kopf { display: flex; align-items: center; gap: 10px; }
+.blatt-kopf h2 { flex: 1; }
+.papier { background: var(--papier); color: var(--tinte); border-radius: 6px; padding: 16px; font: 16px/1.55 var(--f-mono); box-shadow: inset 0 0 40px rgba(120, 90, 40, .18); }
+.papier h3 { font: 700 15px var(--f-mono); margin: 0 0 8px; letter-spacing: .06em; text-transform: uppercase; }
+.messing { background: linear-gradient(135deg, #b8893a, #e2c071 45%, #9c6f28); color: #2b1d05; border-radius: 8px; padding: 16px; display: grid; gap: 10px; box-shadow: inset 0 0 0 3px rgba(60, 40, 5, .35); }
+.messing h3 { font: 800 16px var(--f-titel); margin: 0; letter-spacing: .04em; text-transform: uppercase; }
+.plan { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; font: 700 14px var(--f-mono); }
+.plan svg, .hebel svg { width: 44px; height: 44px; }
+.hebelreihe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.hebel { display: grid; gap: 6px; justify-items: center; background: #1f1a14; border: 1px solid #3d3326; border-radius: 10px; padding: 10px 4px; color: var(--text); cursor: pointer; font: 700 14px var(--f-mono); }
+.hebel .griff { width: 16px; height: 46px; border-radius: 8px; background: #4a4036; position: relative; }
+.hebel .griff::after { content: ""; position: absolute; left: -6px; width: 28px; height: 18px; border-radius: 6px; background: #c9302c; top: 28px; transition: top .2s; }
+.hebel.ein .griff::after { top: 0; background: var(--gut); }
+.tastatur { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.taste { font: 700 22px var(--f-mono); padding: 12px 0; border-radius: 10px; border: 1px solid var(--linie); background: var(--flaeche-2); color: var(--text); cursor: pointer; }
+.anzeige { font: 700 30px var(--f-mono); letter-spacing: .3em; text-align: center; padding: 8px; border-radius: 10px; background: #05080c; border: 1px solid var(--linie); color: var(--lampe); }
+.wackeln { animation: wackeln .4s; }
+@keyframes wackeln { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+.kompass { width: min(260px, 70vw); height: auto; display: block; margin: 0 auto; }
+.dreh { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.kennung { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+.slot { aspect-ratio: 1; border-radius: 6px; border: 1px solid var(--linie); background: #05080c; cursor: pointer; }
+.slot.an { background: var(--lampe); box-shadow: 0 0 14px rgba(255, 196, 107, .7); border-color: var(--lampe); }
+.kennzeile { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
+.kennzeile i { aspect-ratio: 1; border-radius: 2px; background: #cbbf9f; }
+.kennzeile i.an { background: var(--tinte); }
+table { border-collapse: collapse; width: 100%; }
+td, th { padding: 7px 4px; border-bottom: 1px dashed #b9ab88; text-align: left; vertical-align: middle; font-size: 14px; }
+th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.funk { border: 1px dashed var(--lampe); border-radius: 12px; padding: 12px; text-align: center; background: rgba(255, 196, 107, .07); }
+.funk .code { font: 700 34px var(--f-mono); letter-spacing: .25em; color: var(--lampe); }
+.funk p { font-size: 14px; color: var(--leise); }
+.status { font-size: 14px; }
+.status.gut { color: var(--gut); }
+.status.fehler { color: var(--gefahr); }
+.strafe { position: fixed; left: 50%; top: 32%; transform: translateX(-50%); font: 700 42px var(--f-mono); color: var(--gefahr); pointer-events: none; opacity: 0; z-index: 30; }
+.strafe.an { animation: strafe 1.1s ease-out; }
+@keyframes strafe { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -40px); } }
+.stat { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; }
+.stat b { font-family: var(--f-mono); }
+@media (prefers-reduced-motion: reduce) { .wackeln, .strafe.an { animation-duration: .01s; } }
+</style>
+</head>
+<body>
+<canvas id="welt" aria-label="3D-Ansicht des Raums"></canvas>
+<div class="fadenkreuz" id="fadenkreuz" hidden></div>
+<header class="hud" id="hud" hidden>
+  <div class="wer" id="wer"></div>
+  <div class="fortschritt" id="fortschritt"><i></i><i></i><i></i></div>
+  <span class="leer"></span>
+  <button class="knopf klein" id="was" type="button">Was tun?</button>
+  <button class="knopf klein" id="ton" type="button" aria-pressed="false">Ton: aus</button>
+  <output class="uhr" id="uhr">15:00</output>
+</header>
+<div class="tipp" id="tipp" hidden>Wischen zum Umsehen · Tippen zum Untersuchen</div>
+<section class="blatt" id="blatt" hidden aria-live="polite"><div class="blatt-innen" id="blatt-innen"></div></section>
+<section class="menue" id="menue"><div class="menue-innen" id="menue-innen"></div></section>
+<div class="strafe" id="strafe">−30 s</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // ================= Zufall aus dem Einsatzcode =================
+  const ZEICHEN = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  function hash(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const ganz = (r, n) => Math.floor(r() * n);
+  const waehle = (r, l) => l[ganz(r, l.length)];
+  const neuerEinsatz = () => Array.from({ length: 4 }, () => ZEICHEN[Math.floor(Math.random() * 24)]).join("");
+
+  const SYMBOLE = ["Anker", "Stern", "Möwe", "Welle"];
+  function generiere(code) {
+    const r = rng(hash("leuchtfeuer:" + code));
+    let plan;
+    do { plan = SYMBOLE.map(() => r() < 0.5); } while (plan.every((x) => x) || plan.every((x) => !x));
+    const strom = String(100 + ganz(r, 900));
+    let peilung; do { peilung = 15 + ganz(r, 330); } while (peilung % 10 === 0);
+    const muster = () => { let m; do { m = Array.from({ length: 8 }, () => r() < 0.45); } while (m.filter(Boolean).length < 2 || m.every((x) => x)); return m; };
+    const eintraege = [];
+    while (eintraege.length < 7) {
+      const nr = "0" + (100 + ganz(r, 900));
+      const m = muster(), schluessel = m.map(Number).join("");
+      if (eintraege.some((e) => e.nr === nr || e.m.map(Number).join("") === schluessel)) continue;
+      eintraege.push({ nr, m, lage: `${53 + ganz(r, 3)}°${String(ganz(r, 60)).padStart(2, "0")}′N ${7 + ganz(r, 2)}°${String(ganz(r, 60)).padStart(2, "0")}′O` });
+    }
+    const eigen = ganz(r, eintraege.length);
+    const abschluss = Array.from({ length: 3 }, () => waehle(r, ZEICHEN)).join("");
+    return { plan, strom, peilung, eintraege, eigen, feuerNr: eintraege[eigen].nr, muster: eintraege[eigen].m, abschluss };
+  }
+
+  // ================= Zustand =================
+  const SPEICHER = "leuchtfeuer-v1", DAUER = 15 * 60;
+  let z = (() => { try { return JSON.parse(localStorage.getItem(SPEICHER)); } catch { return null; } })() || { schritt: "start" };
+  let M = z.code ? generiere(z.code) : null;
+  const sichere = () => { try { localStorage.setItem(SPEICHER, JSON.stringify(z)); } catch {} };
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  function rest() {
+    if (!z.startzeit) return DAUER;
+    const bis = z.ende || Date.now();
+    return Math.max(0, DAUER - Math.floor((bis - z.startzeit) / 1000) - (z.strafe || 0));
+  }
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  function strafe(sek) {
+    z.strafe = (z.strafe || 0) + sek; z.fehler = (z.fehler || 0) + 1; sichere();
+    const s = $("strafe"); s.textContent = `−${sek} s`; s.classList.remove("an"); void s.offsetWidth; s.classList.add("an");
+    klang("falsch");
+    if (W.blitz !== undefined) W.blitz = 1;
+  }
+
+  // ================= Ton =================
+  let ac = null, tonAn = false, regenQuelle = null;
+  function audio() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === "suspended") ac.resume(); return ac; } catch { return null; } }
+  function rauschen(ctx, sek) { const b = ctx.createBuffer(1, ctx.sampleRate * sek, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; return b; }
+  function regenStart() {
+    const ctx = audio(); if (!ctx || regenQuelle) return;
+    const q = ctx.createBufferSource(); q.buffer = rauschen(ctx, 2); q.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = z.rolle === "keller" ? "lowpass" : "bandpass"; f.frequency.value = z.rolle === "keller" ? 400 : 1400;
+    const g = ctx.createGain(); g.gain.value = z.rolle === "keller" ? 0.08 : 0.05;
+    q.connect(f).connect(g).connect(ctx.destination); q.start(); regenQuelle = q;
+  }
+  function regenStopp() { try { regenQuelle && regenQuelle.stop(); } catch {} regenQuelle = null; }
+  function klang(art) {
+    if (!tonAn) return; const ctx = audio(); if (!ctx) return; const t = ctx.currentTime;
+    const ton = (f, s, d, typ = "sine", v = 0.15) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = typ; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t + s); g.gain.exponentialRampToValueAtTime(v, t + s + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + s + d); o.connect(g).connect(ctx.destination); o.start(t + s); o.stop(t + s + d + 0.05); };
+    if (art === "gut") { ton(523, 0, 0.2); ton(659, 0.12, 0.2); ton(784, 0.24, 0.4); }
+    if (art === "falsch") ton(150, 0, 0.4, "square", 0.1);
+    if (art === "klick") ton(900, 0, 0.05, "square", 0.05);
+    if (art === "donner") { const q = ctx.createBufferSource(); q.buffer = rauschen(ctx, 2.5); const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 160; const g = ctx.createGain(); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 2.4); q.connect(f).connect(g).connect(ctx.destination); q.start(); }
+    if (art === "generator") { ton(55, 0, 1.6, "sawtooth", 0.08); ton(110, 0.1, 1.5, "sawtooth", 0.04); }
+    if (art === "horn") { ton(98, 0, 1.8, "sawtooth", 0.09); ton(147, 0, 1.8, "sawtooth", 0.05); }
+  }
+
+  // ================= Texturen =================
+  function leinwand(w, h, malen) { const c = document.createElement("canvas"); c.width = w; c.height = h; malen(c.getContext("2d"), w, h); const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; }
+  function planken(farbe1, farbe2) {
+    return leinwand(512, 512, (g, w, h) => {
+      for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? farbe1 : farbe2; g.fillRect(0, i * 64, w, 64); g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(0, i * 64, w, 2); for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.08})`; g.fillRect(Math.random() * w, i * 64 + Math.random() * 64, 60 + Math.random() * 120, 1); } }
+    });
+  }
+  function steine() {
+    return leinwand(512, 512, (g, w, h) => {
+      g.fillStyle = "#3b3f44"; g.fillRect(0, 0, w, h);
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 5; x++) { const o = y % 2 ? 50 : 0, l = 30 + Math.random() * 20; g.fillStyle = `hsl(210,6%,${l}%)`; g.fillRect(x * 104 + o - 50 + 3, y * 64 + 3, 98, 58); }
+    });
+  }
+  function symbolPfad(g, i, cx, cy, s) {
+    g.beginPath();
+    if (i === 0) { g.moveTo(cx, cy - s); g.lineTo(cx, cy + s); g.moveTo(cx - s * .55, cy - s * .55); g.lineTo(cx + s * .55, cy - s * .55); g.moveTo(cx - s * .8, cy + s * .2); g.quadraticCurveTo(cx - s * .7, cy + s, cx, cy + s); g.quadraticCurveTo(cx + s * .7, cy + s, cx + s * .8, cy + s * .2); g.moveTo(cx + s * .15, cy - s * .8); g.arc(cx, cy - s * .8, s * .15, 0, 7); }
+    if (i === 1) { for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? s * .42 : s; k ? g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : g.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.closePath(); }
+    if (i === 2) { g.moveTo(cx - s, cy); g.quadraticCurveTo(cx - s * .5, cy - s * .8, cx, cy + s * .1); g.quadraticCurveTo(cx + s * .5, cy - s * .8, cx + s, cy); }
+    if (i === 3) { for (let k = 0; k <= 40; k++) { const x = cx - s + (2 * s * k) / 40, y = cy + Math.sin(k / 40 * Math.PI * 3) * s * .35; k ? g.lineTo(x, y) : g.moveTo(x, y); } }
+  }
+  function symbolSvg(i, farbe = "currentColor") {
+    const pfade = [
+      `<path d="M22 4v36M12 13h20M7 27q2 13 15 13t15-13" fill="none" stroke="${farbe}" stroke-width="3" stroke-linecap="round"/><circle cx="22" cy="6" r="3" fill="none" stroke="${farbe}" stroke-width="2.5"/>`,
+      `<polygon points="22,3 27,17 41,17 30,26 34,40 22,31 10,40 14,26 3,17 17,17" fill="${farbe}"/>`,
+      `<path d="M4 24q9-14 18 2q9-16 18-2" fill="none" stroke="${farbe}" stroke-width="3.5" stroke-linecap="round"/>`,
+      `<path d="M3 22q5-9 9.5 0t9.5 0t9.5 0t9.5 0" fill="none" stroke="${farbe}" stroke-width="3.5" stroke-linecap="round"/>`,
+    ];
+    return `<svg viewBox="0 0 44 44" aria-label="${SYMBOLE[i]}">${pfade[i]}</svg>`;
+  }
+
+  // ================= 3D-Welt =================
+  const W = { bereit: false, objekte: [], marker: [], yaw: 0, pitch: -0.05, blitz: 0 };
+  function baueWelt() {
+    const canvas = $("welt");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, 1, 0.05, 400);
+    Object.assign(W, { renderer, scene, camera, objekte: [], marker: [], uhr: new THREE.Clock() });
+    if (z.rolle === "laterne") baueLaterne(scene); else baueKeller(scene);
+    groesse(); window.addEventListener("resize", groesse);
+    steuerung(canvas);
+    W.bereit = true;
+    renderer.setAnimationLoop(schleife);
+  }
+  function groesse() {
+    if (!W.renderer) return;
+    const w = window.innerWidth, h = window.innerHeight;
+    W.renderer.setSize(w, h, false);
+    W.camera.aspect = w / h;
+    W.camera.fov = w < h ? 78 : 64;
+    W.camera.updateProjectionMatrix();
+  }
+  function mat(farbe, extra = {}) { return new THREE.MeshStandardMaterial({ color: farbe, roughness: 0.8, metalness: 0.05, ...extra }); }
+  function untersuchbar(obj, id, hoehe = 0.35) {
+    obj.traverse((o) => { o.userData.id = id; });
+    W.objekte.push(obj);
+    const tex = leinwand(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30); gr.addColorStop(0, "rgba(255,220,150,1)"); gr.addColorStop(.35, "rgba(255,196,107,.6)"); gr.addColorStop(1, "rgba(255,196,107,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true }));
+    const box = new THREE.Box3().setFromObject(obj), mitte = box.getCenter(new THREE.Vector3());
+    s.position.set(mitte.x, box.max.y + hoehe * 0.5, mitte.z);
+    s.scale.setScalar(0.22);
+    s.userData.id = id;
+    W.scene.add(s); W.marker.push(s);
+  }
+
+  // ---------- Laternenraum ----------
+  function baueLaterne(scene) {
+    scene.background = new THREE.Color(0x070c14);
+    scene.fog = new THREE.FogExp2(0x0b1320, 0.012);
+    W.camera.position.set(0, 1.62, 2.6); W.yaw = 0; W.pitch = -0.12;
+    const amb = new THREE.HemisphereLight(0x5f7da0, 0x10141a, 0.55); scene.add(amb); W.amb = amb;
+    const lampe = new THREE.PointLight(0xffc46b, 0.9, 9, 2); lampe.position.set(0, 2.6, 0); scene.add(lampe); W.lampe = lampe;
+    const R = 3.2;
+    const boden = new THREE.Mesh(new THREE.CircleGeometry(R, 48), mat(0xffffff, { map: planken("#5a3d24", "#4d331d") })); boden.rotation.x = -Math.PI / 2; scene.add(boden);
+    const sockel = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 1, 48, 1, true), mat(0x7a1f1d, { side: THREE.BackSide })); sockel.position.y = 0.5; scene.add(sockel);
+    const glas = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 2.2, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0x9fc2e0, transparent: true, opacity: 0.08, side: THREE.DoubleSide, roughness: 0.1 })); glas.position.y = 2.1; scene.add(glas);
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, s = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.3, 0.07), mat(0x1b1f24, { metalness: 0.6 })); s.position.set(Math.sin(a) * R, 2.1, Math.cos(a) * R); scene.add(s); }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(R, 0.05, 6, 64), mat(0x1b1f24, { metalness: 0.6 })); ring.rotation.x = Math.PI / 2; ring.position.y = 1.0; scene.add(ring);
+    const dach = new THREE.Mesh(new THREE.ConeGeometry(R + 0.2, 1.4, 48, 1, true), mat(0x2a1715, { side: THREE.DoubleSide })); dach.position.y = 3.9; scene.add(dach);
+    // Linse
+    const linse = new THREE.Group();
+    const fuss = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.6, 0.9, 24), mat(0x2b2f35, { metalness: 0.7, roughness: 0.4 })); fuss.position.y = 0.45; linse.add(fuss);
+    const glasMat = new THREE.MeshStandardMaterial({ color: 0xcfe6ff, transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.1, emissive: 0x000000 });
+    const kern = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.0, 24), glasMat); kern.position.y = 1.4; linse.add(kern);
+    for (let i = 0; i < 7; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.03, 8, 32), mat(0xb08a3e, { metalness: 0.8, roughness: 0.3 })); t.rotation.x = Math.PI / 2; t.position.y = 0.95 + i * 0.15; linse.add(t); }
+    const kappe = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.3, 24), mat(0xb08a3e, { metalness: 0.8, roughness: 0.3 })); kappe.position.y = 2.05; linse.add(kappe);
+    scene.add(linse); W.linse = linse; W.glasMat = glasMat;
+    untersuchbar(linse, "linse", 0.2);
+    // Lichtstrahl (erst sichtbar am Ende)
+    const strahl = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 3.5, 60, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd998, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    strahl.rotation.z = Math.PI / 2; strahl.position.set(30, 0, 0);
+    const strahlGruppe = new THREE.Group(); strahlGruppe.position.y = 1.4; strahlGruppe.add(strahl); scene.add(strahlGruppe); W.strahl = strahl; W.strahlGruppe = strahlGruppe;
+    // Messingplatte
+    const platte = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.03), mat(0xd1a854, { metalness: 0.9, roughness: 0.35, map: leinwand(256, 160, (g, w, h) => {
+      g.fillStyle = "#cfa24c"; g.fillRect(0, 0, w, h); g.strokeStyle = "#6b4a14"; g.lineWidth = 6; g.strokeRect(6, 6, w - 12, h - 12);
+      g.fillStyle = "#4a3208"; g.font = "bold 20px Georgia"; g.textAlign = "center"; g.fillText("SICHERUNGSPLAN", w / 2, 36);
+      g.lineWidth = 4; g.strokeStyle = "#4a3208"; g.fillStyle = "#4a3208";
+      M.plan.forEach((ein, i) => { const cx = 36 + i * 61; symbolPfad(g, i, cx, 80, 16); i === 1 ? g.fill() : g.stroke(); g.font = "bold 16px monospace"; g.fillText(ein ? "EIN" : "AUS", cx, 130); });
+    }) }));
+    const pa = -2.1; platte.position.set(Math.sin(pa) * (R - 0.05), 1.35, Math.cos(pa) * (R - 0.05)); platte.lookAt(0, 1.35, 0); scene.add(platte);
+    untersuchbar(platte, "platte", 0.1);
+    // Kontrolltafel (Strom)
+    const tafel = new THREE.Group();
+    const pult = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.0, 0.35), mat(0x2f3a45, { metalness: 0.5, roughness: 0.5 })); pult.position.y = 0.5; tafel.add(pult);
+    const birne = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 12), new THREE.MeshBasicMaterial({ color: 0x551111 })); birne.position.set(0.15, 1.04, 0); tafel.add(birne); W.birne = birne;
+    const ta = 2.0; tafel.position.set(Math.sin(ta) * 2.2, 0, Math.cos(ta) * 2.2); tafel.lookAt(0, 0, 0); scene.add(tafel);
+    untersuchbar(tafel, "tafel");
+    // Kennungsgeber
+    const geber = new THREE.Group();
+    const kasten = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), mat(0x3d2b1c)); kasten.position.y = 0.95; geber.add(kasten);
+    const bein = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.7, 8), mat(0x1b1f24)); bein.position.y = 0.35; geber.add(bein);
+    const kurbel = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.02, 6, 16), mat(0xb08a3e, { metalness: 0.8 })); kurbel.position.set(0.27, 0.95, 0); kurbel.rotation.y = Math.PI / 2; geber.add(kurbel); W.kurbel = kurbel;
+    const ga = -1.0; geber.position.set(Math.sin(ga) * 2.0, 0, Math.cos(ga) * 2.0); geber.lookAt(0, 0, 0); scene.add(geber);
+    untersuchbar(geber, "kennung");
+    // Logbuch auf Tischchen
+    const tisch = new THREE.Group();
+    const platteT = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.04, 20), mat(0x4d331d)); platteT.position.y = 0.75; tisch.add(platteT);
+    const tbein = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.75, 8), mat(0x2a1c10)); tbein.position.y = 0.37; tisch.add(tbein);
+    const buch = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.22), mat(0x5b1e1e)); buch.position.y = 0.8; buch.rotation.y = 0.4; tisch.add(buch);
+    const ka = 3.0; tisch.position.set(Math.sin(ka) * 2.3, 0, Math.cos(ka) * 2.3); scene.add(tisch);
+    untersuchbar(tisch, "logbuch", 0.1);
+    // Draußen: Meer, Regen, Schiff
+    meerUndRegen(scene, -26);
+    const schiff = new THREE.Group();
+    const rumpf = new THREE.Mesh(new THREE.BoxGeometry(6, 1.2, 1.6), mat(0x111418)); schiff.add(rumpf);
+    for (const [x, y, f] of [[-2.4, 1.6, 0xff3b30], [2.4, 1.6, 0x4cff7a], [0, 3.2, 0xffffff], [0.8, 1.1, 0xffe9a8], [-0.6, 1.1, 0xffe9a8]]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 8), new THREE.MeshBasicMaterial({ color: f, fog: false })); l.position.set(x, y, 0); schiff.add(l); }
+    const mast = new THREE.Mesh(new THREE.BoxGeometry(0.15, 3, 0.15), mat(0x111418)); mast.position.y = 1.8; schiff.add(mast);
+    const pa2 = M.peilung * Math.PI / 180, dist = 70;
+    schiff.position.set(Math.sin(pa2) * dist, -25, -Math.cos(pa2) * dist); schiff.lookAt(0, -25, 0);
+    scene.add(schiff); W.schiff = schiff; W.schiffWinkel = pa2; W.schiffDist = dist;
+  }
+
+  // ---------- Maschinenraum ----------
+  function baueKeller(scene) {
+    scene.background = new THREE.Color(0x05070a);
+    scene.fog = new THREE.Fog(0x05070a, 6, 14);
+    W.camera.position.set(0, 1.6, 0.4); W.yaw = 0;
+    const amb = new THREE.HemisphereLight(0x8090a0, 0x1a1410, 0.35); scene.add(amb); W.amb = amb;
+    const lampe = new THREE.PointLight(0xffb85c, 1.3, 10, 2); lampe.position.set(0, 2.5, 0); scene.add(lampe); W.lampe = lampe;
+    const birneM = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffd18a })); birneM.position.copy(lampe.position); scene.add(birneM);
+    const kabel = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.5), mat(0x111111)); kabel.position.set(0, 2.83, 0); scene.add(kabel);
+    const B = 3, H = 3;
+    const wandMat = mat(0xffffff, { map: steine(), side: THREE.BackSide });
+    wandMat.map.wrapS = wandMat.map.wrapT = THREE.RepeatWrapping; wandMat.map.repeat.set(3, 1.5);
+    const raum = new THREE.Mesh(new THREE.BoxGeometry(B * 2, H, B * 2), wandMat); raum.position.y = H / 2; scene.add(raum);
+    const boden = new THREE.Mesh(new THREE.PlaneGeometry(B * 2, B * 2), mat(0xffffff, { map: planken("#3a3a36", "#33332f") })); boden.rotation.x = -Math.PI / 2; boden.position.y = 0.01; scene.add(boden);
+    // Rohre
+    for (const [x, z2, l, rot] of [[-2.8, -2.8, 6, "z"], [2.8, 0, 6, "x"], [-2.8, 1, 3, "y"]]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, l, 10), mat(0x6a4a2a, { metalness: 0.6, roughness: 0.5 })); if (rot === "z") { p.rotation.z = Math.PI / 2; p.position.set(0, 2.6, z2); } if (rot === "x") { p.rotation.x = Math.PI / 2; p.position.set(x, 2.5, 0); } if (rot === "y") p.position.set(x, 1.5, z2); scene.add(p); }
+    // Generator (Mitte hinten)
+    const gen = new THREE.Group();
+    const trommel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.4, 20), mat(0x2f4a3a, { metalness: 0.6, roughness: 0.4 })); trommel.rotation.z = Math.PI / 2; trommel.position.y = 0.7; gen.add(trommel);
+    const rad = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.05, 8, 24), mat(0x222222, { metalness: 0.8 })); rad.position.set(0.8, 0.7, 0); rad.rotation.y = Math.PI / 2; gen.add(rad); W.rad = rad;
+    gen.position.set(0, 0, -2.3); scene.add(gen); W.generator = gen;
+    // Sicherungskasten (rechte Wand)
+    const sk = new THREE.Group();
+    const skKasten = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.15), mat(0x4a4f55, { metalness: 0.6, roughness: 0.5 })); sk.add(skKasten);
+    for (let i = 0; i < 4; i++) { const h = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.06), mat(0xc9302c)); h.position.set(-0.27 + i * 0.18, 0, 0.1); sk.add(h); }
+    sk.position.set(2.9, 1.5, -0.8); sk.rotation.y = -Math.PI / 2; scene.add(sk); W.sicherung = sk;
+    untersuchbar(sk, "sicherung", 0.1);
+    // Schreibtisch mit Telegraf (links)
+    const tisch = new THREE.Group();
+    const tp = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 0.7), mat(0x5a3d24)); tp.position.y = 0.8; tisch.add(tp);
+    for (const [x, zz] of [[-0.6, -0.3], [0.6, -0.3], [-0.6, 0.3], [0.6, 0.3]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.8, 0.06), mat(0x3a2716)); b.position.set(x, 0.4, zz); tisch.add(b); }
+    const tele = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.25), mat(0x1a1a1a, { metalness: 0.7 })); tele.position.set(0.2, 0.9, 0); tisch.add(tele);
+    const taste = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.05, 12), mat(0x111111)); taste.position.set(0.2, 1.0, 0.05); tisch.add(taste);
+    const streifen = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.005, 0.05), mat(0xefe6d2)); streifen.position.set(-0.25, 0.835, 0.1); streifen.rotation.y = 0.3; tisch.add(streifen);
+    tisch.position.set(-2.4, 0, -0.6); tisch.rotation.y = Math.PI / 2; scene.add(tisch);
+    untersuchbar(tisch, "telegraf", 0.1);
+    // Bücherregal (hinten links)
+    const regal = new THREE.Group();
+    const korpus = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.0, 0.35), mat(0x3a2716)); korpus.position.y = 1.0; regal.add(korpus);
+    const farben = [0x5b1e1e, 0x1e3a5b, 0x2f4a2a, 0x6b5a2a, 0x3d2b4a];
+    for (let s = 0; s < 3; s++) for (let i = 0; i < 9; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.42 + Math.random() * 0.1, 0.25), mat(farben[(s * 9 + i) % farben.length])); b.position.set(-0.48 + i * 0.12, 0.3 + s * 0.6, 0.06); regal.add(b); }
+    regal.position.set(-1.8, 0, -2.75); scene.add(regal);
+    untersuchbar(regal, "regal", 0.1);
+    // Werkbank mit Brief (hinten rechts)
+    const bank = new THREE.Group();
+    const bp = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 0.6), mat(0x4d331d)); bp.position.y = 0.85; bank.add(bp);
+    const bb = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.8, 0.5), mat(0x2a1c10)); bb.position.y = 0.42; bank.add(bb);
+    const brief = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.005, 0.3), mat(0xefe6d2)); brief.position.set(0.1, 0.9, 0); brief.rotation.y = -0.3; bank.add(brief);
+    const laterne = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.25, 8), new THREE.MeshBasicMaterial({ color: 0xffb85c })); laterne.position.set(-0.35, 1.0, 0); bank.add(laterne);
+    bank.position.set(1.9, 0, -2.6); scene.add(bank);
+    untersuchbar(bank, "brief", 0.1);
+    // Leiter nach oben (Deko)
+    const leiter = new THREE.Group();
+    for (const x of [-0.25, 0.25]) { const h = new THREE.Mesh(new THREE.BoxGeometry(0.06, 3, 0.06), mat(0x3a2716)); h.position.set(x, 1.5, 0); leiter.add(h); }
+    for (let i = 0; i < 8; i++) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.05), mat(0x3a2716)); s.position.y = 0.3 + i * 0.35; leiter.add(s); }
+    leiter.position.set(0.8, 0, 2.9); scene.add(leiter);
+    W.regenTropfen = null;
+  }
+
+  function meerUndRegen(scene, hoehe) {
+    const geo = new THREE.PlaneGeometry(400, 400, 80, 80);
+    const meer = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x0b2233, roughness: 0.4, metalness: 0.2, flatShading: true }));
+    meer.rotation.x = -Math.PI / 2; meer.position.y = hoehe; scene.add(meer); W.meer = meer;
+    W.meerBasis = Float32Array.from(geo.attributes.position.array);
+    const n = 1600, pos = new Float32Array(n * 6);
+    for (let i = 0; i < n; i++) {
+      let x, zz; do { x = (Math.random() - 0.5) * 40; zz = (Math.random() - 0.5) * 40; } while (x * x + zz * zz < 14);
+      const y = Math.random() * 30 - 15;
+      pos.set([x, y, zz, x + 0.12, y + 0.7, zz], i * 6);
+    }
+    const rg = new THREE.BufferGeometry(); rg.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const regen = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0x9fb8d0, transparent: true, opacity: 0.45 }));
+    scene.add(regen); W.regen = regen;
+  }
+
+  // ---------- Steuerung ----------
+  function steuerung(canvas) {
+    let unten = null, bewegt = 0, letzt = null;
+    canvas.addEventListener("pointerdown", (e) => { unten = { x: e.clientX, y: e.clientY }; letzt = { ...unten }; bewegt = 0; canvas.setPointerCapture(e.pointerId); $("tipp").style.opacity = 0; });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!unten) return;
+      const dx = e.clientX - letzt.x, dy = e.clientY - letzt.y; letzt = { x: e.clientX, y: e.clientY };
+      bewegt += Math.abs(dx) + Math.abs(dy);
+      const f = 0.005 * (70 / W.camera.fov);
+      W.yaw += dx * f; W.pitch = Math.max(-1.1, Math.min(0.9, W.pitch + dy * f));
+    });
+    canvas.addEventListener("pointerup", (e) => {
+      if (unten && bewegt < 8) tippe(e.clientX, e.clientY);
+      unten = null;
+    });
+    window.addEventListener("keydown", (e) => {
+      if (!$("blatt").hidden) { if (e.key === "Escape") schliesse(); return; }
+      if (e.key === "ArrowLeft") W.yaw += 0.1; if (e.key === "ArrowRight") W.yaw -= 0.1;
+      if (e.key === "ArrowUp") W.pitch = Math.min(0.9, W.pitch + 0.08); if (e.key === "ArrowDown") W.pitch = Math.max(-1.1, W.pitch - 0.08);
+      if (e.key === "Enter" || e.key === " ") tippe(window.innerWidth / 2, window.innerHeight / 2);
+    });
+  }
+  const ray = typeof THREE !== "undefined" ? new THREE.Raycaster() : null;
+  function tippe(x, y) {
+    if (!$("blatt").hidden) return;
+    const v = new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+    ray.setFromCamera(v, W.camera);
+    const treffer = ray.intersectObjects([...W.objekte, ...W.marker], true)[0];
+    if (treffer && treffer.object.userData.id) { klang("klick"); oeffne(treffer.object.userData.id); }
+  }
+
+  // ---------- Animationsschleife ----------
+  function schleife() {
+    const dt = Math.min(W.uhr.getDelta(), 0.05), t = W.uhr.elapsedTime;
+    const cam = W.camera;
+    cam.rotation.order = "YXZ"; cam.rotation.y = W.yaw; cam.rotation.x = W.pitch;
+    for (const s of W.marker) s.scale.setScalar(0.18 + Math.sin(t * 3 + s.position.x) * 0.04);
+    // Blitze
+    if (Math.random() < dt * 0.06) { W.blitz = 1; setTimeout(() => klang("donner"), 600 + Math.random() * 1500); }
+    W.blitz = Math.max(0, W.blitz - dt * 2.5);
+    W.amb.intensity = (z.rolle === "laterne" ? 0.55 : 0.35) + W.blitz * (z.rolle === "laterne" ? 2.2 : 0.4);
+    if (z.rolle === "keller") {
+      W.lampe.intensity = 1.2 + Math.sin(t * 17) * 0.05 + (Math.random() < 0.01 ? -0.6 : 0);
+      if (z.generator) W.rad.rotation.x += dt * 12;
+    } else {
+      // Meer
+      const p = W.meer.geometry.attributes.position, b = W.meerBasis;
+      for (let i = 0; i < p.count; i++) { const x = b[i * 3], y = b[i * 3 + 1]; p.array[i * 3 + 2] = Math.sin(x * 0.08 + t * 1.1) * 0.8 + Math.cos(y * 0.11 + t * 0.9) * 0.7; }
+      p.needsUpdate = true;
+      // Regen
+      const r = W.regen.geometry.attributes.position;
+      for (let i = 0; i < r.count; i += 2) {
+        const a = r.array, k = i * 3;
+        a[k + 1] -= dt * 16; a[k + 4] -= dt * 16; a[k] -= dt * 2.5; a[k + 3] -= dt * 2.5;
+        if (a[k + 1] < -15) { a[k + 1] = 15; a[k + 4] = 15.7; a[k] += 0; a[k + 3] = a[k] + 0.12; }
+      }
+      r.needsUpdate = true;
+      // Schiff schaukelt, nähert sich mit ablaufender Zeit
+      const anteil = 1 - rest() / DAUER;
+      const d = z.gewonnen ? W.schiffDist + Math.min(60, (Date.now() - (z.ende || Date.now())) / 300) : W.schiffDist - anteil * 30;
+      const w = W.schiffWinkel + (z.gewonnen ? Math.min(0.6, (Date.now() - (z.ende || Date.now())) / 20000) : 0);
+      W.schiff.position.set(Math.sin(w) * d, -25 + Math.sin(t * 0.8) * 0.4, -Math.cos(w) * d);
+      W.schiff.rotation.z = Math.sin(t * 0.7) * 0.06;
+      // Licht
+      W.birne.material.color.setHex(z.strom ? 0x55ff88 : 0x551111);
+      const an = z.gewonnen ? M.muster[Math.floor(t * 2.5) % 8] : false;
+      W.lampe.intensity = z.strom ? (an ? 3.2 : 1.4) : 0.9;
+      W.glasMat.emissive.setHex(z.strom ? (an ? 0xffc46b : 0x332211) : 0x000000);
+      W.strahl.material.opacity = z.gewonnen ? (an ? 0.3 : 0.06) : 0;
+      W.strahlGruppe.rotation.y = -(z.linse ? M.peilung : 0) * Math.PI / 180 + Math.PI / 2;
+      W.linse.rotation.y = W.strahlGruppe.rotation.y;
+      W.kurbel.rotation.x += z.gewonnen ? dt * 4 : 0;
+    }
+    W.renderer.render(W.scene, W.camera);
+  }
+
+  // ================= Untersuchen =================
+  function schliesse() { $("blatt").hidden = true; }
+  function blatt(titel, html, setup) {
+    $("blatt-innen").innerHTML = `<div class="blatt-kopf"><h2>${titel}</h2><button class="knopf klein" id="zu" type="button">Schließen</button></div>${html}`;
+    $("blatt").hidden = false;
+    $("zu").onclick = schliesse;
+    setup && setup($("blatt-innen"));
+  }
+  function funkBox(code, text) { return `<div class="funk"><p>Durchs Sprachrohr nach ${z.rolle === "laterne" ? "unten" : "oben"}:</p><div class="code">${esc(code)}</div><p>${text}</p></div>`; }
+  function setzeFortschritt() {
+    const f = [z.strom, z.linse, z.gewonnen];
+    [...$("fortschritt").children].forEach((el, i) => el.classList.toggle("an", !!f[i]));
+  }
+  function erfolg(neu) { Object.assign(z, neu); sichere(); setzeFortschritt(); klang("gut"); }
+
+  function ziffernblock(el, laenge, pruefe) {
+    let w = "";
+    el.insertAdjacentHTML("beforeend", `<div class="anzeige" id="anz">${"·".repeat(laenge)}</div><div class="tastatur">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => `<button class="taste" data-d="${d}">${d}</button>`).join("")}<button class="taste" data-d="x">⌫</button><button class="taste" data-d="0">0</button><button class="taste" data-d="ok">OK</button></div>`);
+    const anz = el.querySelector("#anz");
+    el.querySelector(".tastatur").onclick = (e) => {
+      const d = e.target.closest("button")?.dataset.d; if (!d) return;
+      if (d === "x") w = w.slice(0, -1);
+      else if (d === "ok") { if (w.length === laenge && !pruefe(w)) { anz.classList.remove("wackeln"); void anz.offsetWidth; anz.classList.add("wackeln"); w = ""; } }
+      else if (w.length < laenge) w += d;
+      anz.textContent = w.padEnd(laenge, "·");
+    };
+  }
+
+  const OEFFNEN = {
+    // ----- Laterne -----
+    logbuch() {
+      blatt("Logbuch", `<div class="papier"><h3>Feuer Möwensand · Wärterlogbuch</h3>
+        <p>14. Nov. Sturm aus NW. Generator im Keller zweimal ausgefallen. Wenn er steht, bekommt die Laterne keinen Strom, egal was man oben tut.</p><br>
+        <p>Ablauf bei Ausfall:<br>1. Keller: Sicherungen nach dem Plan an der Messingplatte stellen, Generator anwerfen.<br>2. Oben: Freigabecode vom Keller an der Kontrolltafel eingeben.<br>3. Linse auf das Schiff richten. Die Peilung kommt per Telegraf in den Keller.<br>4. Kennung einstellen. Jedes Feuer hat seine eigene. Die Feuer-Nr. steht am Linsenfuß, das Verzeichnis ist unten im Regal.</p><br>
+        <p>Und um Himmels willen: Sprachrohr benutzen.</p></div>`);
+    },
+    platte() {
+      blatt("Messingplatte", `<div class="messing"><h3>Sicherungsplan · Generator</h3><div class="plan">${M.plan.map((ein, i) => `<div>${symbolSvg(i, "#3a2706")}<div>${SYMBOLE[i]}</div><div>${ein ? "EIN" : "AUS"}</div></div>`).join("")}</div></div><p class="leise">Der Sicherungskasten ist unten im Keller.</p>`);
+    },
+    tafel() {
+      if (z.strom) return blatt("Kontrolltafel", `<p class="status gut">Strom liegt an. Die Laterne glimmt.</p>`);
+      blatt("Kontrolltafel", `<p class="leise">Eine Lampe glimmt rot: <b>Kein Strom.</b> Darunter ein Ziffernfeld: „Freigabecode Generator“.</p>`, (el) => {
+        ziffernblock(el, 3, (w) => {
+          if (w === M.strom) { erfolg({ strom: true }); blatt("Kontrolltafel", `<p class="status gut">Klack. Die Lampe springt auf Grün, die Laterne glimmt warm.</p><p class="leise">Jetzt die Linse ausrichten.</p>`); return true; }
+          strafe(30); return false;
+        });
+      });
+    },
+    linse() {
+      let wert = z.linse ? M.peilung : 0;
+      const kompass = () => `<svg class="kompass" viewBox="0 0 200 200"><circle cx="100" cy="100" r="92" fill="#0b1219" stroke="#b08a3e" stroke-width="4"/>${Array.from({ length: 36 }, (_, i) => { const a = i * 10 * Math.PI / 180, l = i % 9 === 0 ? 14 : 7; return `<line x1="${100 + Math.sin(a) * 90}" y1="${100 - Math.cos(a) * 90}" x2="${100 + Math.sin(a) * (90 - l)}" y2="${100 - Math.cos(a) * (90 - l)}" stroke="#b08a3e" stroke-width="2"/>`; }).join("")}${["N", "O", "S", "W"].map((b, i) => `<text x="${100 + Math.sin(i * Math.PI / 2) * 64}" y="${106 - Math.cos(i * Math.PI / 2) * 64}" fill="#e8eef2" font-size="16" font-family="Georgia" text-anchor="middle">${b}</text>`).join("")}<line id="nadel" x1="100" y1="100" x2="100" y2="22" stroke="#ffc46b" stroke-width="5" stroke-linecap="round" transform="rotate(${wert} 100 100)"/><circle cx="100" cy="100" r="7" fill="#ffc46b"/></svg>`;
+      blatt("Linse", `<p class="leise">Am Fuß eingraviert: <b class="mono" style="font-family:var(--f-mono);color:var(--text)">Feuer-Nr. ${M.feuerNr}</b></p>
+        ${kompass()}<div class="anzeige" id="grad">${String(wert).padStart(3, "0")}°</div>
+        <div class="dreh"><button class="knopf" data-s="-10">−10</button><button class="knopf" data-s="-1">−1</button><button class="knopf" data-s="1">+1</button><button class="knopf" data-s="10">+10</button></div>
+        <button class="knopf haupt" id="einrasten">${z.linse ? "Eingerastet" : "Einrasten"}</button><p class="status" id="ls" role="status"></p>`, (el) => {
+        const male = () => { el.querySelector("#grad").textContent = String(wert).padStart(3, "0") + "°"; el.querySelector("#nadel").setAttribute("transform", `rotate(${wert} 100 100)`); };
+        el.querySelector(".dreh").onclick = (e) => { const s = +e.target.closest("button")?.dataset.s; if (!s || z.linse) return; wert = (wert + s + 360) % 360; klang("klick"); male(); };
+        el.querySelector("#einrasten").onclick = () => {
+          const st = el.querySelector("#ls");
+          if (z.linse) return;
+          if (!z.strom) { st.textContent = "Ohne Strom bewegt sich der Linsenmotor nicht."; st.className = "status fehler"; return; }
+          if (wert === M.peilung) { erfolg({ linse: true }); st.textContent = "Die Linse rastet ein. Sie zeigt genau auf die Lichter da draußen."; st.className = "status gut"; el.querySelector("#einrasten").textContent = "Eingerastet"; }
+          else { strafe(30); st.textContent = "Daneben. Der Motor ruckelt zurück."; st.className = "status fehler"; }
+        };
+      });
+    },
+    kennung() {
+      if (z.gewonnen) return zeigeSieg();
+      const m = Array(8).fill(false);
+      blatt("Kennungsgeber", `<p class="leise">Acht Takte, ein Umlauf. Tippe die Takte an, in denen das Feuer leuchten soll. Jedes Feuer hat seine eigene Kennung.</p>
+        <div class="kennung" id="kn">${m.map((_, i) => `<button class="slot" data-i="${i}" aria-label="Takt ${i + 1}"></button>`).join("")}</div>
+        <button class="knopf haupt" id="ueb">Kennung übernehmen</button><p class="status" id="ks" role="status"></p>`, (el) => {
+        el.querySelector("#kn").onclick = (e) => { const b = e.target.closest(".slot"); if (!b) return; const i = +b.dataset.i; m[i] = !m[i]; b.classList.toggle("an", m[i]); klang("klick"); };
+        el.querySelector("#ueb").onclick = () => {
+          const st = el.querySelector("#ks");
+          if (!z.strom || !z.linse) { st.textContent = !z.strom ? "Kein Strom." : "Erst die Linse ausrichten."; st.className = "status fehler"; return; }
+          if (m.every((v, i) => v === M.muster[i])) { erfolg({ gewonnen: true, ende: Date.now() }); klang("horn"); setTimeout(zeigeSieg, 400); }
+          else { strafe(30); st.textContent = "Falsche Kennung. Das Schiff würde uns für ein anderes Feuer halten."; st.className = "status fehler"; }
+        };
+      });
+    },
+    // ----- Keller -----
+    brief() {
+      blatt("Brief auf der Werkbank", `<div class="papier"><h3>An den neuen Gehilfen</h3>
+        <p>Wenn der Generator steht: Die Sicherungen müssen genau so stehen wie auf der Messingplatte oben im Laternenraum. Ich hab mir das nie gemerkt, frag den da oben.</p><br>
+        <p>Die Peilung zum Schiff kommt über den Telegrafen. Das Leuchtfeuerverzeichnis steht im Regal. Unsere Feuer-Nr. ist mir entfallen, aber sie steht oben am Linsenfuß.</p><br>
+        <p>– Hinrich, Wärter</p></div>`);
+    },
+    sicherung() {
+      if (z.generator) return blatt("Sicherungskasten", `<p class="status gut">Der Generator läuft. Der Boden vibriert.</p>${funkBox(M.strom, "Freigabecode für die Kontrolltafel oben.")}`);
+      const s = z.hebel || [false, false, false, false];
+      blatt("Sicherungskasten", `<p class="leise">Vier Hebel mit eingestanzten Symbolen. Oben grün = EIN, unten rot = AUS.</p>
+        <div class="hebelreihe">${SYMBOLE.map((n, i) => `<button class="hebel${s[i] ? " ein" : ""}" data-i="${i}" aria-pressed="${s[i]}">${symbolSvg(i, "#e8eef2")}<span class="griff"></span><span>${n}</span></button>`).join("")}</div>
+        <button class="knopf haupt" id="anwerfen">Generator anwerfen</button><p class="status" id="gs" role="status"></p>`, (el) => {
+        el.querySelector(".hebelreihe").onclick = (e) => { const b = e.target.closest(".hebel"); if (!b) return; const i = +b.dataset.i; s[i] = !s[i]; z.hebel = s; sichere(); b.classList.toggle("ein", s[i]); b.setAttribute("aria-pressed", s[i]); klang("klick"); };
+        el.querySelector("#anwerfen").onclick = () => {
+          if (s.every((v, i) => v === M.plan[i])) { erfolg({ generator: true }); klang("generator"); OEFFNEN.sicherung(); }
+          else { strafe(30); const st = el.querySelector("#gs"); st.textContent = "Funken sprühen. Der Generator stottert und bleibt stehen."; st.className = "status fehler"; }
+        };
+      });
+    },
+    telegraf() {
+      blatt("Telegraf", `<div class="papier"><h3>Lochstreifen, eben eingegangen</h3>
+        <p>+++ DAMPFER ELISE AN FEUER MOEWENSAND +++ KEIN LICHT SICHTBAR +++ UNSERE PEILUNG VON IHNEN AUS ${M.peilung} GRAD +++ BITTE FEUER ZEIGEN +++</p></div>
+        <p class="leise">Unten am Gerät: „Antwort senden“. Drei Buchstaben, die Bestätigung von oben.</p>
+        <form id="tf" class="stapel"><input class="feld" maxlength="3" autocomplete="off" autocapitalize="characters" aria-label="Bestätigung"><button class="knopf haupt" style="margin-top:8px">Senden</button><p class="status" id="ts" role="status"></p></form>`, (el) => {
+        el.querySelector("#tf").onsubmit = (e) => {
+          e.preventDefault();
+          const w = el.querySelector("input").value.trim().toUpperCase();
+          if (w === M.abschluss) { erfolg({ gewonnen: true, ende: Date.now() }); klang("horn"); zeigeSieg(); }
+          else { const st = el.querySelector("#ts"); st.textContent = "Keine Antwort. Lass dir den Code von oben noch einmal geben."; st.className = "status fehler"; klang("falsch"); }
+        };
+      });
+    },
+    regal() {
+      blatt("Leuchtfeuerverzeichnis", `<div class="papier"><h3>Verzeichnis der Leuchtfeuer · Nordsee</h3>
+        <p style="font-size:13px">Kennung: acht Takte je Umlauf. Schwarz = Feuer an.</p><br>
+        <table><thead><tr><th>Feuer-Nr.</th><th>Lage</th><th>Kennung</th></tr></thead><tbody>${
+          M.eintraege.map((e) => `<tr><td><b>${e.nr}</b></td><td style="font-size:12px">${e.lage}</td><td><div class="kennzeile">${e.m.map((a) => `<i class="${a ? "an" : ""}"></i>`).join("")}</div></td></tr>`).join("")
+        }</tbody></table></div>`);
+    },
+  };
+  function oeffne(id) { (OEFFNEN[id] || (() => {}))(); }
+
+  function zeigeSieg() {
+    const s = rest();
+    const sterne = s > 7 * 60 && (z.fehler || 0) <= 1 ? "★★★" : s > 3 * 60 ? "★★☆" : "★☆☆";
+    const oben = z.rolle === "laterne";
+    blatt("Das Feuer brennt", `<p>${oben ? "Der Strahl schneidet durch den Regen. Draußen dreht die Elise ab, langsam, schwerfällig, aber sie dreht ab." : "Durch den Telegrafen rattert eine Nachricht: +++ FEUER IN SICHT +++ DREHEN AB +++ DANKE MOEWENSAND +++"}</p>
+      ${oben ? funkBox(M.abschluss, "Bestätigung für den Telegrafen unten.") : ""}
+      <div class="stat"><span>Restzeit</span><b>${mmss(s)}</b><span>Fehler</span><b>${z.fehler || 0}</b><span>Bewertung</span><b>${sterne}</b></div>
+      <button class="knopf haupt" id="neu">Neuer Einsatz</button>`, (el) => {
+      el.querySelector("#neu").onclick = () => { z = { schritt: "start" }; sichere(); location.reload(); };
+    });
+  }
+
+  function wasTun() {
+    const oben = z.rolle === "laterne";
+    let t;
+    if (z.gewonnen) t = "Geschafft. Das Feuer brennt.";
+    else if (!z.strom) t = oben ? "Kein Strom. Lies dem Keller den Sicherungsplan von der Messingplatte vor. Dann wartest du auf den Freigabecode." : "Frag oben nach dem Sicherungsplan, stell die Hebel und wirf den Generator an. Den Code gibst du nach oben.";
+    else if (!z.linse) t = oben ? "Lass dir die Peilung zum Schiff geben und richte die Linse aus." : "Lies die Peilung vom Telegrafen nach oben.";
+    else t = oben ? "Nenn dem Keller die Feuer-Nr. vom Linsenfuß. Er sagt dir die Kennung aus dem Verzeichnis." : "Frag oben nach der Feuer-Nr. und sag die Kennung aus dem Verzeichnis durch.";
+    if (!oben && z.generator && !z.strom) t = "Gib oben den Freigabecode vom Sicherungskasten durch. Dann: Peilung vom Telegrafen.";
+    blatt("Was tun?", `<p>${t}</p><p class="leise">Auf den leuchtenden Punkten kannst du etwas untersuchen.</p>`);
+  }
+
+  // ================= Menüs =================
+  function menue(html, setup) { $("menue").hidden = false; $("menue-innen").innerHTML = html; setup && setup(); }
+  function zeige() {
+    if (z.schritt === "spiel" || z.schritt === "verloren") return spiel();
+    const turm = `<svg class="leuchtturm" viewBox="0 0 56 86" aria-hidden="true"><path d="M18 84 22 30h12l4 54z" fill="#e8eef2"/><path d="M19.5 66h17l1 8h-19zM21 46h14l.8 8H20.2z" fill="#c9302c"/><rect x="20" y="18" width="16" height="12" fill="#ffc46b"/><path d="M17 18h22l-11-9z" fill="#c9302c"/><path d="M36 22 56 14v16z" fill="#ffc46b" opacity=".45"/></svg>`;
+    ({
+      start: () => menue(`${turm}<h1>Leucht&shy;feuer</h1><p class="untertitel">Sturmnacht auf Hallig Möwensand. Das Feuer ist aus, ein Frachter hält auf die Klippen zu. Zwei Handys, zwei Räume, ein Sprachrohr.</p>
+        <p class="leise">Einer steht oben in der Laterne, einer unten im Maschinenraum. Ihr seht verschiedene Dinge und müsst reden, am selben Tisch oder per Telefon. 15 Minuten.</p>
+        <div class="reihe"><button class="knopf haupt" id="neu">Einsatz planen</button><button class="knopf" id="bei">Einsatz beitreten</button></div>`, () => {
+        $("neu").onclick = () => { z = { schritt: "code", code: neuerEinsatz() }; M = generiere(z.code); sichere(); zeige(); };
+        $("bei").onclick = () => { z.schritt = "beitreten"; sichere(); zeige(); };
+      }),
+      code: () => menue(`<h2>Euer Einsatzcode</h2><div class="codeanzeige">${esc(z.code)}</div><p class="leise">Nenn ihn deinem Partner. Er tippt „Einsatz beitreten“.</p><button class="knopf haupt" id="w">Weiter</button><button class="knopf" id="z">Zurück</button>`, () => {
+        $("w").onclick = () => { z.schritt = "rolle"; sichere(); zeige(); };
+        $("z").onclick = () => { z = { schritt: "start" }; sichere(); zeige(); };
+      }),
+      beitreten: () => menue(`<h2>Einsatz beitreten</h2><form id="f" style="display:grid;gap:10px"><input class="feld" id="c" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="CODE" aria-label="Einsatzcode"><button class="knopf haupt">Beitreten</button><p class="meldung" id="m" role="status"></p></form><button class="knopf" id="z">Zurück</button>`, () => {
+        $("f").onsubmit = (e) => { e.preventDefault(); const c = $("c").value.trim().toUpperCase(); if (!/^[A-Z2-9]{4}$/.test(c)) { $("m").textContent = "Der Code hat vier Zeichen."; $("m").className = "meldung fehler"; return; } z = { schritt: "rolle", code: c }; M = generiere(c); sichere(); zeige(); };
+        $("z").onclick = () => { z = { schritt: "start" }; sichere(); zeige(); };
+      }),
+      rolle: () => menue(`<h2>Wo bist du?</h2><p class="leise">Einsatz <b>${esc(z.code)}</b>. Jeder nimmt einen anderen Raum.</p>
+        <button class="rolle" data-r="laterne"><b>Laternenraum</b><span>Ganz oben, rundum Glas. Linse, Kontrolltafel, Kennungsgeber. Draußen der Sturm und das Schiff.</span></button>
+        <button class="rolle" data-r="keller"><b>Maschinenraum</b><span>Ganz unten. Generator, Sicherungskasten, Telegraf und das Bücherregal.</span></button>
+        <button class="knopf" id="z">Anderer Einsatz</button>`, () => {
+        document.querySelectorAll(".rolle").forEach((b) => (b.onclick = () => { z.rolle = b.dataset.r; z.schritt = "bereit"; sichere(); zeige(); }));
+        $("z").onclick = () => { z = { schritt: "start" }; sichere(); zeige(); };
+      }),
+      bereit: () => menue(`<h2>${z.rolle === "laterne" ? "Laternenraum" : "Maschinenraum"}</h2><p>${z.rolle === "laterne" ? "Du stehst oben in der Laterne. Durch die Scheiben siehst du die Lichter eines Schiffs. Die Laterne ist dunkel." : "Du stehst im Maschinenraum. Der Generator schweigt. Über dir heult der Sturm."}</p>
+        <p class="leise">Wischen zum Umsehen, auf leuchtende Punkte tippen zum Untersuchen. Zählt gemeinsam herunter und tippt gleichzeitig auf „Los“.</p>
+        <label class="reihe" style="align-items:center;gap:8px"><input type="checkbox" id="tonwahl" checked style="width:20px;height:20px"> Mit Ton (Sturm, Donner)</label>
+        <button class="knopf haupt" id="los">Los</button><button class="knopf" id="z">Raum wechseln</button>`, () => {
+        $("los").onclick = () => { tonAn = $("tonwahl").checked; Object.assign(z, { schritt: "spiel", startzeit: Date.now(), strafe: 0, fehler: 0, ende: null, strom: false, generator: false, linse: false, gewonnen: false, hebel: null, ton: tonAn }); sichere(); spiel(); };
+        $("z").onclick = () => { z.schritt = "rolle"; sichere(); zeige(); };
+      }),
+    }[z.schritt] || (() => { z = { schritt: "start" }; zeige(); }))();
+  }
+
+  function spiel() {
+    $("menue").hidden = true; $("hud").hidden = false; $("fadenkreuz").hidden = false; $("tipp").hidden = false;
+    $("wer").innerHTML = `${z.rolle === "laterne" ? "Laterne" : "Keller"}<small>${esc(z.code)}</small>`;
+    tonAn = !!z.ton; $("ton").textContent = tonAn ? "Ton: an" : "Ton: aus"; $("ton").setAttribute("aria-pressed", tonAn);
+    if (typeof THREE === "undefined") { menue(`<h2>3D konnte nicht laden</h2><p class="leise">Die 3D-Bibliothek wurde blockiert. Prüfe die Internetverbindung und lade neu.</p>`); return; }
+    if (!W.bereit) { try { baueWelt(); } catch (e) { menue(`<h2>3D wird nicht unterstützt</h2><p class="leise">Dieses Gerät oder dieser Browser kann kein WebGL. ${esc(e.message)}</p>`); return; } }
+    setzeFortschritt();
+    if (tonAn) regenStart();
+    if (z.gewonnen) setTimeout(zeigeSieg, 300);
+  }
+  $("was").onclick = wasTun;
+  $("ton").onclick = () => { tonAn = !tonAn; z.ton = tonAn; sichere(); $("ton").textContent = tonAn ? "Ton: an" : "Ton: aus"; $("ton").setAttribute("aria-pressed", tonAn); tonAn ? regenStart() : regenStopp(); };
+
+  setInterval(() => {
+    if (z.schritt !== "spiel") return;
+    const s = rest(); $("uhr").textContent = mmss(s); $("uhr").classList.toggle("knapp", s < 120);
+    if (s === 0 && !z.gewonnen && !z.verloren) {
+      z.verloren = true; sichere(); klang("horn");
+      blatt("Zu spät", `<p>Ein langes, tiefes Horn. Dann ein Knirschen, das man bis ${z.rolle === "laterne" ? "hier oben" : "in den Keller"} hört. Die Elise sitzt auf den Klippen.</p><p class="leise">Mit demselben Code bekommt ihr dieselben Rätsel.</p><div class="reihe"><button class="knopf haupt" id="nochmal">Gleicher Einsatz</button><button class="knopf" id="neu">Neuer Einsatz</button></div>`, (el) => {
+        el.querySelector("#nochmal").onclick = () => { Object.assign(z, { schritt: "bereit", verloren: false }); sichere(); location.reload(); };
+        el.querySelector("#neu").onclick = () => { z = { schritt: "start" }; sichere(); location.reload(); };
+      });
+    }
+  }, 250);
+
+  window.__lf = { generiere, oeffne, W, zustand: () => z };
+  zeige();
+})();
+</script>
+</body>
+</html>
